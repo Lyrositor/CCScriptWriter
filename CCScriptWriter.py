@@ -18,7 +18,7 @@ import yaml
 D = [0x45, 0x41, 0x52, 0x54, 0x48, 0x20, 0x42, 0x4f, 0x55, 0x4E, 0x44]
 
 TEXT_DATA = [[0x50000, 0x51b12], [0x51b12, 0x8bc2c], [0x8d9ed, 0x9ff2f],
-             [0x2f4e20, 0x2fa37a]]
+             [0x2f4e20, 0x2fa37a], [0x210000, 0x210652]]
 COMPRESSED_TEXT_PTRS = 0x8cded
 
 CONTROL_CODES = {0x00: 0, 0x01: 0, 0x02: 0, 0x03: 0, 0x04: 2, 0x05: 2, 0x06: 6,
@@ -185,9 +185,12 @@ class CCScriptWriter:
         print("Loading dialogue...")
         for section in TEXT_DATA:
             i = section[0]
+            coffee = False
+            if section[0] == 0x210000:
+                coffee = True
             while i < section[1]:
                 block = i
-                self.dialogue[block], i = self.getText(i)
+                self.dialogue[block], i = self.getText(i, None, coffee)
 
         # Optionally load the CoilSnake pointers.
         if loadCoilSnake:
@@ -222,7 +225,10 @@ class CCScriptWriter:
             if address in pointers:
                 pointers.remove(address)
         for pointer in pointers:
-            lower, higher = FindClosest(self.dialogue, pointer)
+            try:
+                lower, higher = FindClosest(self.dialogue, pointer)
+            except UnboundLocalError:
+                continue
             block, i = self.getText(lower, pointer)
             self.dialogue[lower] = "{}[0A {}]".format(block, ToSNES(pointer))
             self.dialogue[pointer], i = self.getText(pointer)
@@ -246,7 +252,10 @@ class CCScriptWriter:
 
             # Replace all pointers with their label form.
             for p in PATTERNS:
-                self.dialogue[block] = re.sub(p, f, self.dialogue[block])
+                try:
+                    self.dialogue[block] = re.sub(p, f, self.dialogue[block])
+                except (IndexError, KeyError):
+                    continue
 
             # Replace control codes and more with CCScript syntax.
             for r in REPLACE:
@@ -330,8 +339,10 @@ class CCScriptWriter:
             csFile.close()
 
     # Gets the text at a specified location in memory; if stop is specified, it
-    # will forcibly stop looking once it is reached.
-    def getText(self, i, stop=None):
+    # will forcibly stop looking once it is reached. Coffee specifies that the
+    # program should handle the Coffee scence, which has different control
+    # codes.
+    def getText(self, i, stop=None, coffee=False):
 
         block = ""
         while True:
@@ -339,38 +350,67 @@ class CCScriptWriter:
                 break
             c = self.data[i]
             i += 1
-            # Check if it's a control code.
-            if c <= 0x30:
-                code = CONTROL_CODES[c]
-                if isinstance(code, int):
-                    length = code
+            # Check for the coffee scene.
+            if not coffee:
+                # Check if it's a control code.
+                if c <= 0x30:
+                    code = CONTROL_CODES[c]
+                    if isinstance(code, int):
+                        length = code
+                    else:
+                        length = self.getLength(i)
+                    block += "[{}".format(FormatHex(c))
+
+                    # Get the rest of the control code.
+                    codeEnd = i + length
+                    while i < codeEnd:
+                        block += " {}".format(FormatHex(self.data[i]))
+                        i += 1
+                    block += "]"
+
+                    # Stop if this is a block-ending character.
+                    if c == 0x02 or c == 0x0A:
+                        break
+                # Check if it's a quote character.
+                elif c == 0x52:
+                    block += "[52]"
+                # Check if it's a special character.
+                elif c == 0x8c:
+                    block += "[8C]"
+                # Looks like it's a normal character.
                 else:
-                    length = self.getLength(i)
-                block += "[{}".format(FormatHex(c))
-
-                # Get the rest of the control code.
-                codeEnd = i + length
-                while i < codeEnd:
-                    block += " {}".format(FormatHex(self.data[i]))
-                    i += 1
-                block += "]"
-
-                # Stop if this is a block-ending character.
-                if c == 0x02 or c == 0x0A:
-                    break
-            # Check if it's a quote character.
-            elif c == 0x52:
-                block += "[52]"
-            # Check if it's a special character.
-            elif c == 0x8c:
-                block += "[8C]"
-            # Looks like it's a normal character.
+                    try:
+                        block += chr(c - 0x30)
+                    except ValueError:
+                        print("Invalid character.")
+                        block += "_"
             else:
-                try:
-                    block += chr(c - 0x30)
-                except ValueError:
-                    print("Invalid character.")
-                    block += "_"
+                # End of text block.
+                if c == 0x00:
+                    block += "[ 00 ]"
+                    break
+                # Move the text over a distance noted by XX.
+                elif c == 0x01:
+                    block += "[ 01 {} ]".format(self.data[i])
+                    i += 1
+                # Move the text down a distance noted by XX.
+                elif c == 0x02:
+                    block += "[ 02 {} ]".format(self.data[i])
+                    i += 1
+                # Print the name of character XX (01 = Ness, XX[1,4]).
+                elif c == 0x08:
+                    block += "[ 08 {} ]".format(self.data[i])
+                    i += 1
+                # Drop down one line.
+                elif c == 0x09:
+                    block += "[ 09 ]"
+                # Looks like it's a normal character.
+                else:
+                    try:
+                        block += chr(c - 0x30)
+                    except ValueError:
+                        print("Invalid character.")
+                        block += "_"
 
         # Check if it's referencing a location in memory.
         for pattern in PATTERNS:
