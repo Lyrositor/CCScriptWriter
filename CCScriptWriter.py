@@ -17,8 +17,13 @@ import yaml
 
 D = [0x45, 0x41, 0x52, 0x54, 0x48, 0x20, 0x42, 0x4f, 0x55, 0x4E, 0x44]
 
-TEXT_DATA = [[0x50000, 0x51b12], [0x51b12, 0x8bc2c], [0x8d9ed, 0x9ff2f],
-             [0x2f4e20, 0x2fa37a], [0x210000, 0x210652]]
+TEXT_DATA = [[0x50000, 0x51b12],    # SRE_POINTER_TABLE
+             [0x51b12, 0x8bc2d],    # TEXT_DATA
+             [0x8d9ed, 0x9ff2f],    # TEXT_DATA_2
+             [0x210000, 0x21064a],  # COFFEE_SEQUENCE_TEXT
+             [0x210652, 0x210b7e],  # TEA_SEQUENCE_TEXT
+             [0x210b86, 0x210c7a],  # MOVEMENT_TEXT_STRINGS
+             [0x2f4e20, 0x2fa37a]]  # TEXT_DATA_EF4A40
 COMPRESSED_TEXT_PTRS = 0x8cded
 
 CONTROL_CODES = {0x00: 0, 0x01: 0, 0x02: 0, 0x03: 0, 0x04: 2, 0x05: 2, 0x06: 6,
@@ -55,15 +60,20 @@ REPLACE = [["[13][02]\"", "\" end"], ["[03][00]", "\" next\n\""],
            ["[1F 30]", "{font_normal}"], ["[1F 31]", "{font_saturn}"],
            [" \"\"", ""], [" \"\" ", " "], [" \"\"", ""], ["\"\" ", ""]]
 
-COILSNAKE_FILES = ["battle_action_table.yml", "enemy_configuration_table.yml",
+COILSNAKE_FILES = ["attract_mode_txt.yml", "battle_action_table.yml",
+                   "enemy_configuration_table.yml", "map_doors.yml",
                    "item_configuration_table.yml", "npc_config_table.yml",
-                   "telephone_contacts_table.yml", "timed_delivery_table.yml"]
+                   "psi_ability_table.yml", "telephone_contacts_table.yml",
+                   "timed_delivery_table.yml"]
 
 COILSNAKE_POINTERS = ["Text Address", "Death Text Pointer",
                       "Encounter Text Pointer", "Help Text Pointer",
                       "Text Pointer 1", "Text Pointer 2", "Text Pointer",
                       "Delivery Failure Text Pointer",
-                      "Delivery Success Text Pointer"]
+                      "Delivery Success Text Pointer", "Pointer"]
+
+SPECIAL_POINTERS = [0x49ea4, 0x49ea8, 0x49eac, 0x49eb0, 0x49eb4, 0x49eb8,
+                    0x49ebc, 0x49ec0]
 
 HEADER = """/*
  * EarthBound Text Dump
@@ -131,6 +141,7 @@ class CCScriptWriter:
         self.header = None
         self.outputDirectory = outputDirectory
         self.pointers = []
+        self.specialPointers = {}
 
         # Get the data from the ROM file.
         self.data.fromfile(romFile, int(os.path.getsize(romFile.name)))
@@ -186,7 +197,8 @@ class CCScriptWriter:
         for section in TEXT_DATA:
             i = section[0]
             coffee = False
-            if section[0] == 0x210000:
+            if section[0] == 0x210000 or section[0] == 0x210652 \
+              or section[0] == 0x210b86:
                 coffee = True
             while i < section[1]:
                 block = i
@@ -206,16 +218,33 @@ class CCScriptWriter:
                 csFile = open(os.path.join(o, fileName), "r")
                 yamlData = yaml.load(csFile, Loader=yaml.CSafeLoader)
                 csFile.close()
-                for e, v in yamlData.iteritems():
-                    for p in COILSNAKE_POINTERS:
-                        if p in v:
-                            try:
-                                pointer = int(v[p][1:], 16) - 0xc00000
-                                if pointer > 0 and pointer not in self.dialogue:
-                                    self.pointers.append(pointer)
-                            except ValueError:
-                                self.pointers.append(int(v[p][12:], 16)
-                                                     - 0xc00000)
+                if fileName != "map_doors.yml":
+                    for e, v in yamlData.iteritems():
+                        for p in COILSNAKE_POINTERS:
+                            if p in v:
+                                try:
+                                    pointer = int(v[p][1:], 16) - 0xc00000
+                                    if pointer > 0 \
+                                       and pointer not in self.dialogue:
+                                        self.pointers.append(pointer)
+                                except ValueError:
+                                    self.pointers.append(int(v[p][12:], 16)
+                                                         - 0xc00000)
+                else:
+                    p = "Text Pointer"
+                    for e, v in yamlData.iteritems():
+                        for s, d in v.iteritems():
+                            if not d: continue
+                            for k in d:
+                                if p in k:
+                                    try:
+                                        pointer = int(k[p][1:], 16) - 0xc00000
+                                        if pointer > 0 \
+                                           and pointer not in self.dialogue:
+                                            self.pointers.append(pointer)
+                                    except ValueError:
+                                        self.pointers.append(int(k[p][12:], 16)
+                                                             - 0xc00000)
 
         # Add new blocks as needed by the pointers.
         print("Checking pointers...")
@@ -236,6 +265,18 @@ class CCScriptWriter:
         # Assign each group to its output file.
         for k, block in enumerate(sorted(self.dialogue)):
             self.dataFiles[block] = "data_{0:0>2}".format(k // 100)
+
+        # Add special pointer locations.
+        for p in SPECIAL_POINTERS:
+            address = ""
+            i = p
+            while i < p + 4:
+                address += " {}".format(FormatHex(self.data[i]))
+                i += 1
+            address = FromSNES(address)
+            m = self.dataFiles[address]
+            h = hex(0xc00000 + address)
+            self.specialPointers[p] = "[{{e({}.l_{})}}]".format(m, h)
 
     # Performs various replacements on the dialogue blocks.
     def processDialogue(self):
@@ -274,7 +315,8 @@ class CCScriptWriter:
         mainFile = open(os.path.join(o, "main.ccs"), "w")
         m = mainFile.write
         m(HEADER)
-        m("// DO NOT EDIT THIS FILE.")
+        m("// DO NOT EDIT THIS FILE.\n\n")
+        m("command e(label) \"{long label}\"")
 
         # Output each data_xx.ccs file.
         numFiles = math.ceil(len(self.dialogue) / 100)
@@ -301,6 +343,9 @@ class CCScriptWriter:
                                                     f, hex(0xc00000 + block)))
             dataFile.close()
             i += 1
+        m("\n\n// Special Pointers")
+        for k, p in self.specialPointers.iteritems():
+            m("\nROM[{}] = \"{}\"".format(hex(k + 0xc00000 + h), p))
         mainFile.close()
 
         # Optionally output to the CoilSnake project.
@@ -315,21 +360,41 @@ class CCScriptWriter:
         for fileName in COILSNAKE_FILES:
             csFile = open(os.path.join(o, fileName), "r")
             yamlData = yaml.load(csFile, Loader=yaml.CSafeLoader)
-            for e, v in yamlData.iteritems():
-                pointers = {}
-                for p in COILSNAKE_POINTERS:
-                    if p in v:
-                        try:
-                            pointers[p] = int(v[p][1:], 16)
-                            if pointers[p] < 0xc00000:
-                                del pointers[p]
-                        except ValueError:
-                            pointers[p] = int(v[p][12:], 16)
-                if not pointers:
-                    continue
-                for k, v in pointers.iteritems():
-                    f = self.dataFiles[v - 0xc00000]
-                    yamlData[e][k] = "{}.l_{}".format(f, hex(v))
+            if fileName != "map_doors.yml":
+                for e, v in yamlData.iteritems():
+                    pointers = {}
+                    for p in COILSNAKE_POINTERS:
+                        if p in v:
+                            try:
+                                pointers[p] = int(v[p][1:], 16)
+                                if pointers[p] < 0xc00000:
+                                    del pointers[p]
+                            except ValueError:
+                                pointers[p] = int(v[p][12:], 16)
+                    if not pointers:
+                        continue
+                    for k, v in pointers.iteritems():
+                        f = self.dataFiles[v - 0xc00000]
+                        yamlData[e][k] = "{}.l_{}".format(f, hex(v))
+            else:
+                p = "Text Pointer"
+                for e, v in yamlData.iteritems():
+                    for s, d in v.iteritems():
+                        if not d: continue
+                        for n, k in enumerate(d):
+                            pointers = {}
+                            if p in k:
+                                try:
+                                    pointers[p] = int(k[p][1:], 16)
+                                    if pointers[p] < 0xc00000:
+                                        del pointers[p]
+                                except ValueError:
+                                    pointers[p] = int(k[p][12:], 16)
+                            if not pointers:
+                                continue
+                            for a, b in pointers.iteritems():
+                                f = self.dataFiles[b - 0xc00000]
+                                yamlData[e][s][n][a] = "{}.l_{}".format(f, hex(b))
             csFile = open(os.path.join(o, fileName), "w")
             output = yaml.dump(yamlData, default_flow_style=False,
                       Dumper=yaml.CSafeDumper)
@@ -371,12 +436,9 @@ class CCScriptWriter:
                     # Stop if this is a block-ending character.
                     if c == 0x02 or c == 0x0A:
                         break
-                # Check if it's a quote character.
-                elif c == 0x52:
-                    block += "[52]"
                 # Check if it's a special character.
-                elif c == 0x8c:
-                    block += "[8C]"
+                elif c == 0x52 or c == 0x8b or c == 0x8c or c == 0x8d:
+                    block += "[{}]".format(FormatHex(c))
                 # Looks like it's a normal character.
                 else:
                     try:
@@ -391,15 +453,15 @@ class CCScriptWriter:
                     break
                 # Move the text over a distance noted by XX.
                 elif c == 0x01:
-                    block += "[ 01 {} ]".format(self.data[i])
+                    block += "[ 01 {} ]".format(FormatHex(self.data[i]))
                     i += 1
                 # Move the text down a distance noted by XX.
                 elif c == 0x02:
-                    block += "[ 02 {} ]".format(self.data[i])
+                    block += "[ 02 {} ]".format(FormatHex(self.data[i]))
                     i += 1
                 # Print the name of character XX (01 = Ness, XX[1,4]).
                 elif c == 0x08:
-                    block += "[ 08 {} ]".format(self.data[i])
+                    block += "[ 08 {} ]".format(FormatHex(self.data[i]))
                     i += 1
                 # Drop down one line.
                 elif c == 0x09:
