@@ -74,7 +74,7 @@ COILSNAKE_POINTERS = ["Text Address", "Death Text Pointer",
                       "Delivery Success Text Pointer", "Pointer"]
 
 SPECIAL_POINTERS = [0x49ea4, 0x49ea8, 0x49eac, 0x49eb0, 0x49eb4, 0x49eb8,
-                    0x49ebc, 0x49ec0]
+                    0x49ebc, 0x49ec0, 0xcffd5]
 
 HEADER = """/*
  * EarthBound Text Dump
@@ -244,6 +244,15 @@ class CCScriptWriter:
                                             self.pointers.append(pointer)
                                     except ValueError:
                                         self.pointers.append(int(k[p][12:], 16))
+
+        # Find the special pointed-to locations.
+        for p in SPECIAL_POINTERS:
+            address = ""
+            i = p
+            while i < p + 4:
+                address += " {}".format(FormatHex(self.data[i]))
+                i += 1
+            self.pointers.append(FromSNES(address))
 
         # Add new blocks as needed by the pointers.
         print("Checking pointers...")
