@@ -22,6 +22,7 @@ TEXT_DATA = [[0x50000, 0x51b12],    # SRE_POINTER_TABLE
              [0x8d9ed, 0x9ff2f],    # TEXT_DATA_2
              [0x210000, 0x21064a],  # COFFEE_SEQUENCE_TEXT
              [0x210652, 0x210b7e],  # TEA_SEQUENCE_TEXT
+             #[0x21413f, 0x214de8],  # STAFF_TEXT
              [0x210b86, 0x210c7a],  # MOVEMENT_TEXT_STRINGS
              [0x2f4e20, 0x2fa37a]]  # TEXT_DATA_EF4A40
 COMPRESSED_TEXT_PTRS = 0x8cded
@@ -114,14 +115,14 @@ def FromSNES(snesNum):
 
     if snesNum.count("0") == 8:
         return 0
-    return int("".join(reversed(snesNum.strip().split())), 16) - 0xC00000
+    return int("".join(reversed(snesNum.strip().split())), 16)
 
 # Converts a hexadecimal address to an SNES address.
 def ToSNES(hexNum):
 
     if hexNum == 0:
         return "00 00 00 00"
-    h = hex(hexNum + 0xC00000).lstrip("0x").upper()
+    h = hex(hexNum).lstrip("0x").upper()
     return " ".join(reversed(re.findall("\w\w", "{0:0>8}".format(h))))
 
 
@@ -201,7 +202,7 @@ class CCScriptWriter:
               or section[0] == 0x210b86:
                 coffee = True
             while i < section[1]:
-                block = i
+                block = i + 0xc00000
                 self.dialogue[block], i = self.getText(i, None, coffee)
 
         # Optionally load the CoilSnake pointers.
@@ -223,13 +224,12 @@ class CCScriptWriter:
                         for p in COILSNAKE_POINTERS:
                             if p in v:
                                 try:
-                                    pointer = int(v[p][1:], 16) - 0xc00000
-                                    if pointer > 0 \
+                                    pointer = int(v[p][1:], 16)
+                                    if pointer > 0xc00000 \
                                        and pointer not in self.dialogue:
                                         self.pointers.append(pointer)
                                 except ValueError:
-                                    self.pointers.append(int(v[p][12:], 16)
-                                                         - 0xc00000)
+                                    self.pointers.append(int(v[p][12:], 16))
                 else:
                     p = "Text Pointer"
                     for e, v in yamlData.iteritems():
@@ -238,13 +238,12 @@ class CCScriptWriter:
                             for k in d:
                                 if p in k:
                                     try:
-                                        pointer = int(k[p][1:], 16) - 0xc00000
-                                        if pointer > 0 \
+                                        pointer = int(k[p][1:], 16)
+                                        if pointer > 0xc00000 \
                                            and pointer not in self.dialogue:
                                             self.pointers.append(pointer)
                                     except ValueError:
-                                        self.pointers.append(int(k[p][12:], 16)
-                                                             - 0xc00000)
+                                        self.pointers.append(int(k[p][12:], 16))
 
         # Add new blocks as needed by the pointers.
         print("Checking pointers...")
@@ -258,9 +257,9 @@ class CCScriptWriter:
                 lower, higher = FindClosest(self.dialogue, pointer)
             except UnboundLocalError:
                 continue
-            block, i = self.getText(lower, pointer)
+            block, i = self.getText(lower - 0xc00000, pointer - 0xc00000)
             self.dialogue[lower] = "{}[0A {}]".format(block, ToSNES(pointer))
-            self.dialogue[pointer], i = self.getText(pointer)
+            self.dialogue[pointer], i = self.getText(pointer - 0xc00000)
 
         # Assign each group to its output file.
         for k, block in enumerate(sorted(self.dialogue)):
@@ -275,7 +274,7 @@ class CCScriptWriter:
                 i += 1
             address = FromSNES(address)
             m = self.dataFiles[address]
-            h = hex(0xc00000 + address)
+            h = hex(address)
             self.specialPointers[p] = "[{{e({}.l_{})}}]".format(m, h)
 
     # Performs various replacements on the dialogue blocks.
@@ -332,20 +331,20 @@ class CCScriptWriter:
             dialogue = sorted(self.dialogue)[i * 100:i * 100 + 100]
             m("\n\n// Memory Overwriting: {}".format(fileName))
             for block in dialogue:
-                d("l_{}:\n".format(hex(0xc00000 + block)))
+                d("l_{}:\n".format(hex(block)))
                 lines = self.dialogue[block].split("\n")
                 for line in lines:
                     l = line.replace(f, "")
                     d("    {}\n".format(l))
                 d("\n")
                 h = self.header
-                m("\nROM[{}] = goto({}l_{})".format(hex(0xc00000 + block + h),
-                                                    f, hex(0xc00000 + block)))
+                m("\nROM[{}] = goto({}l_{})".format(hex(block + h), f,
+                                                    hex(block)))
             dataFile.close()
             i += 1
         m("\n\n// Special Pointers")
         for k, p in self.specialPointers.iteritems():
-            m("\nROM[{}] = \"{}\"".format(hex(k + 0xc00000 + h), p))
+            m("\nROM[{}] = \"{}\"".format(hex(k + h + 0xc00000), p))
         mainFile.close()
 
         # Optionally output to the CoilSnake project.
@@ -374,7 +373,7 @@ class CCScriptWriter:
                     if not pointers:
                         continue
                     for k, v in pointers.iteritems():
-                        f = self.dataFiles[v - 0xc00000]
+                        f = self.dataFiles[v]
                         yamlData[e][k] = "{}.l_{}".format(f, hex(v))
             else:
                 p = "Text Pointer"
@@ -393,8 +392,9 @@ class CCScriptWriter:
                             if not pointers:
                                 continue
                             for a, b in pointers.iteritems():
-                                f = self.dataFiles[b - 0xc00000]
-                                yamlData[e][s][n][a] = "{}.l_{}".format(f, hex(b))
+                                f = self.dataFiles[b]
+                                yamlData[e][s][n][a] = "{}.l_{}".format(f,
+                                                                        hex(b))
             csFile = open(os.path.join(o, fileName), "w")
             output = yaml.dump(yamlData, default_flow_style=False,
                       Dumper=yaml.CSafeDumper)
@@ -558,7 +558,7 @@ class CCScriptWriter:
         p = COMPRESSED_TEXT_PTRS + (bank * 0x100 + idx) * 4
         pointer = self.data[p:p + 4]
         pointer.reverse()
-        pointer = int(reduce(lambda x, y: (x << 8) | y, pointer)) - 0xC00000
+        pointer = int(reduce(lambda x, y: (x << 8) | y, pointer)) - 0xc00000
         returnString = ""
         while self.data[pointer] != 0:
             returnString += chr(self.data[pointer] - 0x30)
@@ -575,7 +575,7 @@ class CCScriptWriter:
             if not address:
                 return "[{}00 00 00 00]".format(prefix)
             m = self.dataFiles[address]
-            h = hex(0xc00000 + address)
+            h = hex(address)
             if prefix == "0A ":
                 return "\" goto({}.l_{}) \"".format(m, h)
             elif prefix == "08 ":
@@ -593,7 +593,7 @@ class CCScriptWriter:
                 else:
                     returnString += " {{e({}.l_{})}}".format(
                                                       self.dataFiles[address],
-                                                      hex(0xc00000 + address))
+                                                      hex(address))
                 i += 4
             if len(matchObj.groups()) == 4:
                 returnString += matchObj.groups()[3]
