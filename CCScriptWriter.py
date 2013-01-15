@@ -18,8 +18,17 @@ import yaml
 D = [0x45, 0x41, 0x52, 0x54, 0x48, 0x20, 0x42, 0x4f, 0x55, 0x4E, 0x44]
 
 TEXT_DATA = [[0x50000, 0x51b12],    # SRE_POINTER_TABLE
-             [0x51b12, 0x8bc2d],    # TEXT_DATA
-             [0x8d9ed, 0x9ff2f],    # TEXT_DATA_2
+             [0x51b12, 0x57fc1],    # TEXT_DATA (1)
+             [0x58000, 0x5ffec],    # TEXT_DATA (2)
+             [0x60000, 0x67eec],    # TEXT_DATA (3)
+             [0x68000, 0x6ffe3],    # TEXT_DATA (4)
+             [0x70000, 0x77f00],    # TEXT_DATA (5)
+             [0x78000, 0x7ff40],    # TEXT_DATA (6)
+             [0x80000, 0x87f23],    # TEXT_DATA (7)
+             [0x88000, 0x8bc2d],    # TEXT_DATA (8)
+             [0x8d9ed, 0x8fff3],    # TEXT_DATA_2 (1)
+             [0x90000, 0x97fb3],    # TEXT_DATA_2 (2)
+             [0x98000, 0x9ff2f],    # TEXT_DATA_2 (3)
              [0x210000, 0x21064a],  # COFFEE_SEQUENCE_TEXT
              [0x210652, 0x210b7e],  # TEA_SEQUENCE_TEXT
              #[0x21413f, 0x214de8],  # STAFF_TEXT
