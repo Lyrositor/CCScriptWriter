@@ -276,7 +276,9 @@ class CCScriptWriter:
             except UnboundLocalError:
                 continue
             block, i = self.getText(lower - 0xc00000, pointer - 0xc00000)
-            self.dialogue[lower] = "{}[0A {}]".format(block, ToSNES(pointer))
+            self.dialogue[lower] = ["{}[0A {}]".format(block[0],
+                                                       ToSNES(pointer)),
+                                    block[1]]
             self.dialogue[pointer], i = self.getText(pointer - 0xc00000)
 
         # Assign each group to its output file.
@@ -301,23 +303,25 @@ class CCScriptWriter:
         print("Processing dialogue...")
         f = self.replaceWithLabel
         for block in self.dialogue:
-            self.dialogue[block] = "\"{}\"".format(self.dialogue[block])
+            self.dialogue[block][0] = "\"{}\"".format(self.dialogue[block][0])
 
             # Replace compressed text.
-            self.dialogue[block] = re.sub(r"\[(15|16|17) (\w\w)\]",
-                                          self.replaceCompressedText,
-                                          self.dialogue[block])
+            self.dialogue[block][0] = re.sub(r"\[(15|16|17) (\w\w)\]",
+                                             self.replaceCompressedText,
+                                             self.dialogue[block][0])
 
             # Replace all pointers with their label form.
             for p in PATTERNS:
                 try:
-                    self.dialogue[block] = re.sub(p, f, self.dialogue[block])
+                    self.dialogue[block][0] = re.sub(p, f,
+                                                     self.dialogue[block][0])
                 except (IndexError, KeyError):
                     continue
 
             # Replace control codes and more with CCScript syntax.
             for r in REPLACE:
-                self.dialogue[block] = self.dialogue[block].replace(r[0], r[1])
+                self.dialogue[block][0] = self.dialogue[block][0].replace(r[0],
+                                                                          r[1])
 
     # Outputs the processed dialogue to the specified output directory.
     def outputDialogue(self, outputCoilSnake=False):
@@ -350,14 +354,15 @@ class CCScriptWriter:
             m("\n\n// Memory Overwriting: {}".format(fileName))
             for block in dialogue:
                 d("l_{}:\n".format(hex(block)))
-                lines = self.dialogue[block].split("\n")
+                lines = self.dialogue[block][0].split("\n")
                 for line in lines:
                     l = line.replace(f, "")
                     d("    {}\n".format(l))
                 d("\n")
                 h = self.header
-                m("\nROM[{}] = goto({}l_{})".format(hex(block + h), f,
-                                                    hex(block)))
+                if self.dialogue[block][1] >= 5:
+                    m("\nROM[{}] = goto({}l_{})".format(hex(block + h), f,
+                                                        hex(block)))
             dataFile.close()
             i += 1
         m("\n\n// Special Pointers")
@@ -428,6 +433,7 @@ class CCScriptWriter:
     def getText(self, i, stop=None, coffee=False):
 
         block = ""
+        start = i
         while True:
             if stop and stop == i:
                 break
@@ -507,7 +513,7 @@ class CCScriptWriter:
                         self.pointers.append(a)
                         idx += 4
 
-        return block, i
+        return [block, i - start], i
 
     # Gets the length of a control code with variable length.
     def getLength(self, i):
@@ -566,7 +572,10 @@ class CCScriptWriter:
                       0x0C: 3, 0x0D: 4, 0x0E: 3, 0x0F: 3, 0x10: 3, 0x11: 3,
                       0x12: 3, 0x13: 3, 0x14: 5, 0x15: 3, 0x17: 5, 0x18: 2,
                       0x19: 2, 0x20: 1, 0x21: 2, 0x22: 1, 0x23: 2, 0x24: 2}
-        return combos[self.data[i]]
+        try:
+            return combos[self.data[i]]
+        except:
+            return 0
 
     # Replaces the compressed text control codes with their values.
     def replaceCompressedText(self, matchObj):
