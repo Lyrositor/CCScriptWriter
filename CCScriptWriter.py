@@ -85,6 +85,8 @@ COILSNAKE_POINTERS = ["Text Address", "Death Text Pointer",
 SPECIAL_POINTERS = [0x49ea4, 0x49ea8, 0x49eac, 0x49eb0, 0x49eb4, 0x49eb8,
                     0x49ebc, 0x49ec0, 0xcffd5]
 
+ASM_POINTERS = [0x49dbd, 0x49dc9]
+
 HEADER = """/*
  * EarthBound Text Dump
  * Time: {}
@@ -145,6 +147,7 @@ class CCScriptWriter:
     def __init__(self, romFile, outputDirectory):
 
         # Declare our variables.
+        self.asmPointers = {}
         self.data = array.array("B")
         self.dialogue = {}
         self.dataFiles = {}
@@ -296,6 +299,15 @@ class CCScriptWriter:
             m = self.dataFiles[address]
             h = hex(address)
             self.specialPointers[p] = "[{{e({}.l_{})}}]".format(m, h)
+        for a in ASM_POINTERS:
+            address = FromSNES("{} {} {} {}".format(FormatHex(self.data[a + 1]),
+                                                    FormatHex(self.data[a + 2]),
+                                                    FormatHex(self.data[a + 6]),
+                                                    FormatHex(self.data[a + 7]))
+                              )
+            m = self.dataFiles[address]
+            h = hex(address)
+            self.asmPointers[a] = "{}.l_{}".format(m, h)
 
     # Performs various replacements on the dialogue blocks.
     def processDialogue(self):
@@ -365,9 +377,13 @@ class CCScriptWriter:
                                                         hex(block)))
             dataFile.close()
             i += 1
+
+        # Take care of the special pointers (both SNES and ASM type).
         m("\n\n// Special Pointers")
         for k, p in self.specialPointers.iteritems():
             m("\nROM[{}] = \"{}\"".format(hex(k + h + 0xc00000), p))
+        for k, p in self.asmPointers.iteritems():
+            m("\n_asmptr({}, {})".format(hex(k + h + 0xc00000), p))
         mainFile.close()
 
         # Optionally output to the CoilSnake project.
