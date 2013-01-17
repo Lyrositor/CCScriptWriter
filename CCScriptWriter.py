@@ -69,6 +69,9 @@ REPLACE = [["[13][02]\"", "\" end"], ["[03][00]", "\" next\n\""],
            ["[1F 06]", "{music_switching_on}"], ["[1F B0]", "{save}"],
            ["[1F 30]", "{font_normal}"], ["[1F 31]", "{font_saturn}"],
            [" \"\"", ""], [" \"\" ", " "], [" \"\"", ""], ["\"\" ", ""]]
+RE_REPLACE = [r"\[(0[4|5|7])( \w\w \w\w)\]",
+              r"\[(10|18 01|18 03|0E|0B|0C])( \w\w)\]",
+              r"\[(1F 02|1F 00 00|1F 07])( \w\w)\]"]
 
 COILSNAKE_FILES = ["attract_mode_txt.yml", "battle_action_table.yml",
                    "enemy_configuration_table.yml", "map_doors.yml",
@@ -334,6 +337,9 @@ class CCScriptWriter:
             for r in REPLACE:
                 self.dialogue[block][0] = self.dialogue[block][0].replace(r[0],
                                                                           r[1])
+            for r in RE_REPLACE:
+                self.dialogue[block][0] = re.sub(r, self.replaceWithCCScript,
+                                                 self.dialogue[block][0])
 
     # Outputs the processed dialogue to the specified output directory.
     def outputDialogue(self, outputCoilSnake=False):
@@ -642,6 +648,36 @@ class CCScriptWriter:
                 returnString += matchObj.groups()[3]
             returnString += "]"
             return returnString
+
+    # Replace with CCScript syntax.
+    def replaceWithCCScript(self, matchObj):
+
+        t = matchObj.groups()[0]
+        a = FromSNES(matchObj.groups()[1])
+        if t == "04":
+            return "{{set(flag {})}}".format(a)
+        elif t == "05":
+            return "{{unset(flag {})}}".format(a)
+        elif t == "07":
+            return "{{isset(flag {})}}".format(a)
+        elif t == "10":
+            return "{{pause({})}}".format(a)
+        elif t == "18 01":
+            return "{{window_open({})}}".format(a)
+        elif t == "18 03":
+            return "{{window_switch({})}}".format(a)
+        elif t == "0E":
+            return "{{counter({})}}".format(a)
+        elif t == "0B":
+            return "{{result_is({})}}".format(a)
+        elif t == "0C":
+            return "{{result_not({})}}".format(a)
+        elif t == "1F 02":
+            return "{{sound({})}}".format(a)
+        elif t == "1F 00 00":
+            return "{{music({})}}".format(a)
+        elif t == "1F 07":
+            return "{{music_effect({})}}".format(a)
 
 
 ########
