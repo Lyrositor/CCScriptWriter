@@ -154,7 +154,6 @@ class CCScriptWriter:
         self.data = array.array("B")
         self.dialogue = {}
         self.dataFiles = {}
-        self.header = None
         self.outputDirectory = outputDirectory
         self.pointers = []
         self.specialPointers = {}
@@ -162,30 +161,11 @@ class CCScriptWriter:
         # Get the data from the ROM file.
         self.data.fromfile(romFile, int(os.path.getsize(romFile.name)))
 
-        # Check for an unheadered HiROM.
-        try:
-            if ~self.data[0xffdc] & 0xff == self.data[0xffde] \
-              and ~self.data[0xffdd] & 0xff == self.data[0xffdf] \
-              and self.data[0xffc0:0xffc0 + len(D)].tolist() == D:
-                self.header = 0
-        except IndexError:
-            pass
-
-        # Check for an unheadered LoROM.
-        try:
-            if ~self.data[0x7fdc] & 0xff == self.data[0x7fde] \
-              and ~self.data[0x7fdd] & 0xff == self.data[0x7fdf] \
-              and self.data[0xffc0:0xffc0 + len(D)].tolist() == D:
-                self.header = 0
-        except IndexError:
-            pass
-
         # Check for a headered HiROM.
         try:
             if ~self.data[0x101dc] & 0xff == self.data[0x101de] \
               and ~self.data[0x101dd] & 0xff == self.data[0x101df] \
               and self.data[0xffc0+0x200:0xffc0 + 0x200 + len(D)].tolist() == D:
-                self.header = -0x200
                 self.data = self.data[0x200:]
             romFile.close()
         except IndexError:
@@ -196,7 +176,6 @@ class CCScriptWriter:
             if ~self.data[0x81dc] & 0xff == self.data[0x81de] \
               and ~self.data[0x81dd] & 0xff == self.data[0x81df] \
               and self.data[0xffc0+0x200:0xffc0 + 0x200 + len(D)].tolist() == D:
-                self.header = -0x200
                 self.data = self.data[0x200:]
         except IndexError:
             pass
@@ -390,9 +369,8 @@ class CCScriptWriter:
                     l = line.replace(f, "")
                     d("    {}\n".format(l))
                 d("\n")
-                h = self.header
                 if self.dialogue[block][1] >= 5:
-                    m("\nROM[{}] = goto({}l_{})".format(hex(block + h), f,
+                    m("\nROM[{}] = goto({}l_{})".format(hex(block), f,
                                                         hex(block)))
             dataFile.close()
             i += 1
@@ -400,12 +378,12 @@ class CCScriptWriter:
         # Take care of the special pointers (both SNES and ASM type).
         m("\n\n// Special Pointers")
         for k, p in self.specialPointers.iteritems():
-            m("\nROM[{}] = \"{}\"".format(hex(k + h + 0xc00000), p))
+            m("\nROM[{}] = \"{}\"".format(hex(k + 0xc00000), p))
         for k, p in self.asmPointers.iteritems():
             if p[1] == 0:
-                m("\n_asmptr({}, {})".format(hex(k + h + 0xc00000), p[0]))
+                m("\n_asmptr({}, {})".format(hex(k + 0xc00000), p[0]))
             elif p[1] == 1:
-                m("\n_lasmptr({}, {})".format(hex(k + h + 0xc00000), p[0]))
+                m("\n_lasmptr({}, {})".format(hex(k + 0xc00000), p[0]))
         mainFile.close()
 
         # Optionally output to the CoilSnake project.
