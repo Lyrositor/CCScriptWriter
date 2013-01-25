@@ -699,7 +699,7 @@ class CCScriptWriter:
 if __name__ == "__main__":
 
     try:
-        print("CCScriptWriter v1.0")
+        print("CCScriptWriter v1.1")
         start = time.time()
 
         # Get the input and output files from the terminal.
