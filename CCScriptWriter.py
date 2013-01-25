@@ -147,7 +147,7 @@ def ToSNES(hexNum):
 
 class CCScriptWriter:
 
-    def __init__(self, romFile, outputDirectory):
+    def __init__(self, romFile, outputDirectory, raw=False):
 
         # Declare our variables.
         self.asmPointers = {}
@@ -156,6 +156,7 @@ class CCScriptWriter:
         self.dataFiles = {}
         self.outputDirectory = outputDirectory
         self.pointers = []
+        self.raw = raw
         self.specialPointers = {}
 
         # Get the data from the ROM file.
@@ -308,28 +309,29 @@ class CCScriptWriter:
         print("Processing dialogue...")
         f = self.replaceWithLabel
         for block in self.dialogue:
-            self.dialogue[block][0] = "\"{}\"".format(self.dialogue[block][0])
+            b = self.dialogue[block][0]
+            b = "\"{}\"".format(b)
 
             # Replace compressed text.
-            self.dialogue[block][0] = re.sub(r"\[(15|16|17) (\w\w)\]",
-                                             self.replaceCompressedText,
-                                             self.dialogue[block][0])
+            if not self.raw:
+                b = re.sub(r"\[(15|16|17) (\w\w)\]", self.replaceCompressedText,
+                           b)
 
             # Replace all pointers with their label form.
             for p in PATTERNS:
                 try:
-                    self.dialogue[block][0] = re.sub(p, f,
-                                                     self.dialogue[block][0])
+                    b = re.sub(p, f, b)
                 except (IndexError, KeyError):
                     continue
 
             # Replace control codes and more with CCScript syntax.
-            for r in REPLACE:
-                self.dialogue[block][0] = self.dialogue[block][0].replace(r[0],
-                                                                          r[1])
-            for r in RE_REPLACE:
-                self.dialogue[block][0] = re.sub(r, self.replaceWithCCScript,
-                                                 self.dialogue[block][0])
+            if not self.raw:
+                for r in REPLACE:
+                    b = b.replace(r[0], r[1])
+                for r in RE_REPLACE:
+                    b = re.sub(r, self.replaceWithCCScript, b)
+
+            self.dialogue[block][0] = b
 
     # Outputs the processed dialogue to the specified output directory.
     def outputDialogue(self, outputCoilSnake=False):
@@ -635,9 +637,9 @@ class CCScriptWriter:
                 return "[{}00 00 00 00]".format(prefix)
             m = self.dataFiles[address]
             h = hex(address)
-            if prefix == "0A ":
+            if prefix == "0A " and not self.raw:
                 return "\" goto({}.l_{}) \"".format(m, h)
-            elif prefix == "08 ":
+            elif prefix == "08 " and not self.raw:
                 return "\" call({}.l_{}) \"".format(m, h)
             else:
                 return "[{}{{e({}.l_{})}}]".format(prefix, m, h)
@@ -701,18 +703,23 @@ if __name__ == "__main__":
         start = time.time()
 
         # Get the input and output files from the terminal.
-        parser = argparse.ArgumentParser(description="Extracts the dialogue from "
-                                         "EarthBound and outputs it into a "
-                                         "CCScript file.")
-        parser.add_argument("rom", metavar="INPUT", type=argparse.FileType("rb"),
-                            help="The source ROM file.")
+        parser = argparse.ArgumentParser(description="Extracts the dialogue "
+                                         "from EarthBound and outputs it into a"
+                                         " CCScript file.")
+        parser.add_argument("rom", metavar="INPUT",
+                            type=argparse.FileType("rb"),
+                            help="the source ROM file")
         parser.add_argument("output", metavar="OUTPUT", type=str,
-                            help="The folder to output to (if --coilsnake is "
-                            "specified, this must be location of the CoilSnake "
-                            "project; the dialogue will be placed in "
-                            "OUTPUT/ccscript/).")
-        parser.add_argument("-c", "--coilsnake", help="Indicates that CCScript "
-                            "also modify a CoilSnake project.", action="store_true")
+                            help="the folder to output to (if --coilsnake is "
+                            "specified, this must be the location of the "
+                            "CoilSnake project; the dialogue will be placed in "
+                            "OUTPUT/ccscript/)")
+        parser.add_argument("-c", "--coilsnake", help="indicates that "
+                            "CCScriptWriter should also modify a CoilSnake "
+                            "project", action="store_true")
+        parser.add_argument("-r", "--raw", help="specifies that the control "
+                            "codes should be outputted raw, without CCScript "
+                            "replacements", action="store_true")
         args = parser.parse_args()
 
         # Run the program.
@@ -720,7 +727,7 @@ if __name__ == "__main__":
             output = os.path.join(args.output, "ccscript")
         else:
             output = args.output
-        main = CCScriptWriter(args.rom, output)
+        main = CCScriptWriter(args.rom, output, args.raw)
         main.loadDialogue(args.coilsnake)
         main.processDialogue()
         main.outputDialogue(args.coilsnake)
