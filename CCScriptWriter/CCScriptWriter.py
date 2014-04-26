@@ -9,7 +9,9 @@ import os
 import re
 import sys
 import time
+
 import yaml
+
 
 #############
 # CONSTANTS #
@@ -696,8 +698,7 @@ class CCScriptWriter:
 # MAIN #
 ########
 
-if __name__ == "__main__":
-
+def main():
     try:
         print("CCScriptWriter v1.1")
         start = time.time()
@@ -735,3 +736,5 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\rProgram execution aborted.")
 
+if __name__ == "__main__":
+    main()
