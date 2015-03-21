@@ -455,6 +455,8 @@ class CCScriptWriter:
         block = ""
         start = i
         text = False
+        normal_block_expect_02 = False
+
         while True:
             if stop and stop == i:
                 break
@@ -471,6 +473,10 @@ class CCScriptWriter:
                         length = self.getLength(i)
                     block += "[{}".format(FormatHex(c))
 
+                    # Mark if we expect an [02] before the end of the block
+                    if c == 0x19:
+                        normal_block_expect_02 = True
+
                     # Get the rest of the control code.
                     codeEnd = i + length
                     while i < codeEnd:
@@ -479,7 +485,10 @@ class CCScriptWriter:
                     block += "]"
 
                     # Stop if this is a block-ending character.
-                    if c == 0x02 or c == 0x0A:
+                    if c == 0x02 and normal_block_expect_02:
+                        # But don't stop if we expect an [02] that doesn't end the block
+                        normal_block_expect_02 = False
+                    elif c == 0x02 or c == 0x0A:
                         break
                 # Check if it's a special character.
                 elif c == 0x52 or c == 0x8b or c == 0x8c or c == 0x8d:
