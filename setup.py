@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="CCScriptWriter",
-    version="1.1",
+    version="1.2",
     description="Extracts the dialogue from EarthBound and outputs it into a CCScript file.",
     url="https://github.com/Lyrositor/CCScriptWriter",
     packages=find_packages(),
