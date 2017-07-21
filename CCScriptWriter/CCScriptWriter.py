@@ -11,6 +11,7 @@ import sys
 import time
 
 import yaml
+from functools import reduce
 
 
 #############
@@ -211,15 +212,15 @@ class CCScriptWriter:
             try:
                 with open(project) as f: pass
             except IOError:
-                print("Failed to open \"{}\". Invalid CoilSnake project. "
-                      "Aborting.".format(project))
+                print(("Failed to open \"{}\". Invalid CoilSnake project. "
+                      "Aborting.".format(project)))
                 sys.exit(1)
             for fileName in COILSNAKE_FILES:
                 csFile = open(os.path.join(o, fileName), "r")
                 yamlData = yaml.load(csFile, Loader=yaml.CSafeLoader)
                 csFile.close()
                 if fileName != "map_doors.yml":
-                    for e, v in yamlData.iteritems():
+                    for e, v in yamlData.items():
                         for p in COILSNAKE_POINTERS:
                             if p in v:
                                 try:
@@ -231,8 +232,8 @@ class CCScriptWriter:
                                     self.pointers.append(int(v[p][12:], 16))
                 else:
                     p = "Text Pointer"
-                    for e, v in yamlData.iteritems():
-                        for s, d in v.iteritems():
+                    for e, v in yamlData.items():
+                        for s, d in v.items():
                             if not d: continue
                             for k in d:
                                 if p in k:
@@ -255,7 +256,7 @@ class CCScriptWriter:
 
         # Add new blocks as needed by the pointers.
         print("Checking pointers...")
-        pointers = filter(None, sorted(set(self.pointers)))
+        pointers = [_f for _f in sorted(set(self.pointers)) if _f]
         self.pointers = []
         for address in self.dialogue:
             if address in pointers:
@@ -381,9 +382,9 @@ class CCScriptWriter:
 
         # Take care of the special pointers (both SNES and ASM type).
         m("\n\n// Special Pointers")
-        for k, p in self.specialPointers.iteritems():
+        for k, p in self.specialPointers.items():
             m("\nROM[{}] = \"{}\"".format(hex(k + 0xc00000), p))
-        for k, p in self.asmPointers.iteritems():
+        for k, p in self.asmPointers.items():
             if p[1] == 0:
                 m("\n_asmptr({}, {})".format(hex(k + 0xc00000), p[0]))
             elif p[1] == 1:
@@ -403,7 +404,7 @@ class CCScriptWriter:
             csFile = open(os.path.join(o, fileName), "r")
             yamlData = yaml.load(csFile, Loader=yaml.CSafeLoader)
             if fileName != "map_doors.yml":
-                for e, v in yamlData.iteritems():
+                for e, v in yamlData.items():
                     pointers = {}
                     for p in COILSNAKE_POINTERS:
                         if p in v:
@@ -415,13 +416,13 @@ class CCScriptWriter:
                                 pointers[p] = int(v[p][12:], 16)
                     if not pointers:
                         continue
-                    for k, v in pointers.iteritems():
+                    for k, v in pointers.items():
                         f = self.dataFiles[v]
                         yamlData[e][k] = "{}.l_{}".format(f, hex(v))
             else:
                 p = "Text Pointer"
-                for e, v in yamlData.iteritems():
-                    for s, d in v.iteritems():
+                for e, v in yamlData.items():
+                    for s, d in v.items():
                         if not d: continue
                         for n, k in enumerate(d):
                             pointers = {}
@@ -434,7 +435,7 @@ class CCScriptWriter:
                                     pointers[p] = int(k[p][12:], 16)
                             if not pointers:
                                 continue
-                            for a, b in pointers.iteritems():
+                            for a, b in pointers.items():
                                 f = self.dataFiles[b]
                                 yamlData[e][s][n][a] = "{}.l_{}".format(f,
                                                                         hex(b))
@@ -741,7 +742,7 @@ def main():
         main.loadDialogue(args.coilsnake)
         main.processDialogue()
         main.outputDialogue(args.coilsnake)
-        print("Complete. Time: {:.2f}s".format(float(time.time() - start)))
+        print(("Complete. Time: {:.2f}s".format(float(time.time() - start))))
     except KeyboardInterrupt:
         print("\rProgram execution aborted.")
 
