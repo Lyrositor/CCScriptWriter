@@ -212,8 +212,8 @@ class CCScriptWriter:
             try:
                 with open(project) as f: pass
             except IOError:
-                print(("Failed to open \"{}\". Invalid CoilSnake project. "
-                      "Aborting.".format(project)))
+                print("Failed to open \"{}\". Invalid CoilSnake project. "
+                      "Aborting.".format(project))
                 sys.exit(1)
             for fileName in COILSNAKE_FILES:
                 csFile = open(os.path.join(o, fileName), "r")
@@ -742,7 +742,7 @@ def main():
         main.loadDialogue(args.coilsnake)
         main.processDialogue()
         main.outputDialogue(args.coilsnake)
-        print(("Complete. Time: {:.2f}s".format(float(time.time() - start))))
+        print("Complete. Time: {:.2f}s".format(float(time.time() - start)))
     except KeyboardInterrupt:
         print("\rProgram execution aborted.")
 
