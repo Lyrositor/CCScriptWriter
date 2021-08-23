@@ -75,7 +75,6 @@ REPLACE = [["[13][02]\"", "\" end"], ["[03][00]", "\" next\n\""],
 RE_REPLACE = [r"\[(0[4|5|7])( \w\w \w\w)\]",
               r"\[(10|18 01|18 03|0E|0B|0C])( \w\w)\]",
               r"\[(1F 02|1F 00 00|1F 07])( \w\w)\]"]
-
 COILSNAKE_FILES = ["attract_mode_txt.yml", "battle_action_table.yml",
                    "enemy_configuration_table.yml", "map_doors.yml",
                    "item_configuration_table.yml", "npc_config_table.yml",
@@ -142,6 +141,165 @@ def ToSNES(hexNum):
     h = hex(hexNum).lstrip("0x").upper()
     return " ".join(reversed(re.findall("\w\w", "{0:0>8}".format(h))))
 
+########################################
+# Arg matching + replacement functions #
+########################################
+
+# essentially, the problem is that the args are in different formats and counts
+# so they're basically impossible to match with something like a normal regular expression
+# 
+# we don't want to build an AST yet, if we can avoid it. So... We'll have to just
+# break things down. Painfully.
+#
+# The complexity here wants an AST to be walked. That really is the proper way to do this.
+# Later refactors should consider just building the AST and walking it instead of asking
+# "how do we make these functions more efficient?"
+#
+# you can rename these, just aggressively avoiding name collisions
+#
+# ~greysondn@github, 22 August 2021
+
+def grey_replace(ccScriptCommand, before, after, block, replaceFunc):
+    # this is actually the outer wrapper
+    # ccscriptcommand - given to replaceFunc
+    # before - text before
+    # after - text after
+    # block - the source block to replace in
+    # replaceFunc - function used to generate replacement text, f(ccArgsText, ccScriptCommand)
+    ret  = block            # maybe not necessary, but helps track the eventual return
+    blen = len(before)      # shorter name, no function call for val
+    alen = len(after)       # same
+
+    # seed var for loop context
+    found = True
+
+    # we're going to find all instances
+    while found:
+        # we've not found this during this iteration
+        found = False
+
+        # try to find start
+        location = ret.find(before)
+
+        if (-1 != location):
+            # means we found start
+            # try to find end
+            endDist = ret[(location + blen):].find(after)
+
+            if (-1 != endpos):
+                # we've found a start and an end, now to just figure out the
+                # middle and replace it
+                found = True
+
+                # the segment we'll replace
+                toReplace = ret[location:(location+blen+alen+dist)]
+
+                # just the part with args
+                # and just in case user is awful, strip whitespace from it
+                argContent = toReplace[blen:dist].strip()
+
+                # use replaceFunc to generate the replacement text
+                replaceWith = replaceFunc(argContent, ccScriptCommand)
+
+                # actually replace it
+                # it might be safe to remove the count limit
+                ret = ret.replace(toReplace, replaceWith, 1)
+
+    # didn't find any/any more
+    # return whatever we wound up with
+    return ret
+
+def grey_replaceByteArgs(byteArgs, ccScriptCommand):
+    # eventually
+    ret = ccScriptCommand + "("
+    
+    # split
+    bArgs = byteArgs.split()
+
+    # convert to int..?
+    for i in range(bArgs.len):
+        # first is different
+        if (i > 0):
+            ret = ret + ", "
+        
+        # convert to int, then to string, then staple to ret
+        ret = ret + str(int(bArgs[i], 16))
+
+    # end paren
+    ret = ret + ")"
+
+    # done
+    return ret
+
+def grey_replace_all(block):
+    # ------------
+    # setup return
+    # ------------
+    ret = block
+
+    # ---------
+    # byte args
+    # ---------
+    
+    # text control
+    ret = grey_replace("itemname",     "[1C 05 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("name",         "[1C 02 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("psiname",      "[1C 12 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("stat",         "[1C 01 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("teleportname", "[1C 06 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("text_blips",   "[1F 04 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("text_color",   "[1C 00 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("text_pos",     "[18 05 ", "]", ret, grey_replaceByteArgs)
+
+    # goods and money
+    ret = grey_replace("give",    "[1D 00 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("hasitem", "[1D 05 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("take",    "[1D 01 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("usable",  "[1F 81 ", "]", ret, grey_replaceByteArgs)
+
+    # stats
+    ret = grey_replace("boost_guts",        "[1E 0B ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("boost_iq",          "[1E 0A ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("boost_luck",        "[1E 0E ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("boost_speed",       "[1E 0C ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("boost_vitality",    "[1E 0D ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("change_level",      "[1E 08 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("consumepp",         "[1E 07 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("consumepp_percent", "[1E 05 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("heal",              "[1E 02 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("heal_percent",      "[1E 00 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("hurt",              "[1E 03 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("hurt_percent",      "[1E 01 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("recoverpp",         "[1E 06 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("recoverpp_percent", "[1E 04 ", "]", ret, grey_replaceByteArgs)
+    
+    # sound and music
+    ret = grey_replace("music",        "[1F 00 00 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("music_effect", "[1F 07 ",    "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("sound",        "[1F 02 ",    "]", ret, grey_replaceByteArgs)
+
+    # gameplay control
+    ret = grey_replace("event",         "[1F 41 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("hotspot_off",   "[1F 67 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("learnpsi",      "[1F 71 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("lock_movement", "[1F E5 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("party_add",     "[1F 11 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("party_remove",  "[1F 12 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("teleport",      "[1F 20 ", "]", ret, grey_replaceByteArgs)
+    ret = grey_replace("warp",          "[1F 21 ", "]", ret, grey_replaceByteArgs)
+
+    # visual effects
+    ret = grey_replace("show_party", "[1F EC FF ", "]", ret, grey_replaceByteArgs)
+
+    ret = grey_replace("char_direction",  "[1F 13 ", "]",    ret, grey_replaceByteArgs)
+    ret = grey_replace("show_char",       "[1F EC ", "]",    ret, grey_replaceByteArgs)
+    ret = grey_replace("hide_char",       "[1F EB ", " 06]", ret, grey_replaceByteArgs)
+    ret = grey_replace("hide_char_float", "[1F 1D ", "]",    ret, grey_replaceByteArgs)
+
+    # --------
+    # end func
+    # --------
+    return ret
 
 ##################
 # CCScriptWriter #
@@ -333,6 +491,7 @@ class CCScriptWriter:
                     b = b.replace(r[0], r[1])
                 for r in RE_REPLACE:
                     b = re.sub(r, self.replaceWithCCScript, b)
+                b = grey_replace_all(b)
 
             self.dialogue[block][0] = b
 
